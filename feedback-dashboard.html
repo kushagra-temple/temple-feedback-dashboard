@@ -21,19 +21,19 @@ body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSys
 h1{font-size:22px;font-weight:700;letter-spacing:-.01em;}
 h2{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);margin-bottom:12px;}
 .topbar{padding-bottom:14px;border-bottom:1px solid var(--rule);margin-bottom:22px;}
-.tabs{display:flex;gap:3px;border-bottom:1px solid var(--rule);margin-bottom:20px;}
-.tab{background:none;border:none;font-family:inherit;font-size:13px;cursor:pointer;padding:9px 15px;color:var(--ink3);border-bottom:2px solid transparent;margin-bottom:-1px;}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--rule);margin-bottom:24px;}
+.tab{background:none;border:none;font-family:inherit;font-size:16px;cursor:pointer;padding:12px 20px;color:var(--ink3);border-bottom:2px solid transparent;margin-bottom:-1px;}
 .tab:hover{color:var(--ink2);}
 .tab.on{color:var(--ink);font-weight:700;border-bottom-color:var(--ink);}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:11px;}
-.card{background:var(--card);border:1px solid var(--rule);border-radius:11px;padding:14px 17px;cursor:pointer;transition:border-color .12s,box-shadow .12s,transform .12s;display:flex;flex-direction:column;gap:8px;}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px;}
+.card{background:var(--card);border:1px solid var(--rule);border-radius:14px;padding:20px 24px;cursor:pointer;transition:border-color .12s,box-shadow .12s,transform .12s;display:flex;flex-direction:column;gap:12px;}
 .card:hover{border-color:var(--ink);box-shadow:0 5px 16px rgba(0,0,0,.06);transform:translateY(-2px);}
-.cn{font-size:15px;font-weight:700;}.cm{color:var(--ink3);font-size:11px;}
-.ct{font-size:22px;font-weight:700;line-height:1;}
+.cn{font-size:19px;font-weight:700;}.cm{color:var(--ink3);font-size:13px;}
+.ct{font-size:30px;font-weight:700;line-height:1;}
 .ctop{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
-.cf{font-size:11px;color:var(--ink2);border-top:1px dashed var(--rule);padding-top:8px;}
+.cf{font-size:13px;color:var(--ink2);border-top:1px dashed var(--rule);padding-top:11px;}
 .cf b{color:var(--ink);font-weight:600;}
-.cgo{font-size:10px;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;}
+.cgo{font-size:12px;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;}
 .back{background:none;border:none;cursor:pointer;font-family:inherit;color:var(--ink2);font-size:12px;padding:0;margin-bottom:14px;display:inline-flex;align-items:center;gap:5px;}
 .back:hover{color:var(--ink);}
 .dh{display:flex;align-items:flex-end;justify-content:space-between;padding-bottom:14px;border-bottom:1px solid var(--rule);margin-bottom:20px;gap:14px;}
@@ -204,13 +204,31 @@ let REMARKS={};
 try{REMARKS=JSON.parse(localStorage.getItem(RKEY)||"{}");}catch(e){}
 
 // ===== ACCESS CONTROL =====
-// Edit this list to add/remove people. role:"admin" sees everything.
-// role:"team" + team:"<Team Name>" restricts to that team only (must match a key in DATA.taxonomy exactly).
+// Edit this list to add/remove people.
+//  - role:"admin" sees everything.
+//  - role:"team" with teams:[...] restricts to those team(s) only.
+//    Team names must match keys in DATA.taxonomy exactly:
+//    "Hardware/Firmware", "Manufacturing", "Adhesion", "Data Science",
+//    "Science Team", "Tech", "Product Team", "Support".
 const ACCESS_LIST=[
+  {email:"arjun@temple.com",role:"admin"},
+  {email:"aaqib@temple.com",role:"admin"},
   {email:"kushagra@temple.com",role:"admin"},
   {email:"jalaj@temple.com",role:"admin"},
-  {email:"aaqib@temple.com",role:"admin"},
-  {email:"chinmay@temple.com",role:"team",team:"Science Team"}
+  {email:"ramni@temple.com",role:"admin"},
+  {email:"neha@temple.com",role:"admin"},
+  {email:"dhruv@temple.com",role:"admin"},
+  {email:"vidushi@temple.com",role:"admin"},
+  {email:"samdish@temple.com",role:"admin"},
+  {email:"aman.kant@temple.com",role:"admin"},
+  {email:"yukti@temple.com",role:"team",teams:["Science Team"]},
+  {email:"sanchit@temple.com",role:"team",teams:["Science Team"]},
+  {email:"nitish@temple.com",role:"team",teams:["Science Team"]},
+  {email:"ajay@temple.com",role:"team",teams:["Hardware/Firmware","Adhesion"]},
+  {email:"padmalaya@temple.com",role:"team",teams:["Hardware/Firmware","Adhesion"]},
+  {email:"satya@temple.com",role:"team",teams:["Hardware/Firmware","Adhesion"]}
+  // Hardware team (see both Hardware/Firmware AND Adhesion) — add emails like:
+  // {email:"name@temple.com",role:"team",teams:["Hardware/Firmware","Adhesion"]},
 ];
 const SESSION_KEY="temple_session_v1";
 let SESSION=null;
@@ -250,7 +268,8 @@ function handleGoogleSignIn(response){
     return;
   }
   errEl.classList.remove("show");
-  SESSION={email,role:acc.role,team:acc.team||null};
+  const teams=acc.teams?acc.teams:(acc.team?[acc.team]:[]);
+  SESSION={email,role:acc.role,teams};
   try{sessionStorage.setItem(SESSION_KEY,JSON.stringify(SESSION));}catch(e){}
   enterApp();
 }
@@ -262,17 +281,30 @@ function logout(){
   if(window.google&&google.accounts&&google.accounts.id)google.accounts.id.disableAutoSelect();
 }
 function isAdmin(){return SESSION&&SESSION.role==="admin";}
-function allowedTeam(){return SESSION&&SESSION.role==="team"?SESSION.team:null;}
-function canSeeTeam(area){return isAdmin()||allowedTeam()===area;}
+function allowedTeams(){return SESSION&&SESSION.role==="team"&&SESSION.teams?SESSION.teams:[];}
+function isRestricted(){return !isAdmin()&&allowedTeams().length>0;}
+function canSeeTeam(area){return isAdmin()||allowedTeams().indexOf(area)>=0;}
 function enterApp(){
   document.getElementById("login-view").hidden=true;
   document.getElementById("app-view").hidden=false;
-  const tag=isAdmin()?`<b>${esc(SESSION.email)}</b> · admin <button class="logout-btn" onclick="logout()" style="margin-left:8px;">sign out</button>`:`<b>${esc(SESSION.email)}</b> · ${esc(SESSION.team)} <button class="logout-btn" onclick="logout()" style="margin-left:8px;">sign out</button>`;
+  const tag=isAdmin()?`<b>${esc(SESSION.email)}</b> · admin <button class="logout-btn" onclick="logout()" style="margin-left:8px;">sign out</button>`:`<b>${esc(SESSION.email)}</b> · ${esc(allowedTeams().join(", "))} <button class="logout-btn" onclick="logout()" style="margin-left:8px;">sign out</button>`;
   document.getElementById("who-tag").innerHTML=tag;
-  document.getElementById("tab-members").hidden=!isAdmin();
+  document.getElementById("tab-members").hidden=false;
   renderTeamGrid();renderMemberGrid();route();
 }
-if(SESSION&&findAccess(SESSION.email)){enterApp();}else{document.getElementById("login-view").hidden=false;}
+(function(){
+  if(SESSION&&SESSION.email){
+    const acc=findAccess(SESSION.email);
+    if(acc){
+      // Rebuild session fresh from the current access list (handles format changes + permission updates).
+      const teams=acc.teams?acc.teams:(acc.team?[acc.team]:[]);
+      SESSION={email:SESSION.email,role:acc.role,teams};
+      enterApp();
+      return;
+    }
+  }
+  document.getElementById("login-view").hidden=false;
+})();
 function saveR(id,v){if(v&&v.trim())REMARKS[id]=v;else delete REMARKS[id];try{localStorage.setItem(RKEY,JSON.stringify(REMARKS));}catch(e){}}
 function onR(id,el){saveR(id,el.value);el.classList.toggle("saved",!!(el.value&&el.value.trim()));}
 function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
@@ -334,27 +366,38 @@ function renderTeamGrid(){
 }
 
 function renderMemberGrid(){
-  if(!isAdmin())return;
-  document.getElementById("member-grid").innerHTML=DATA.members.map(m=>{
-    const r=DATA.records.filter(x=>x.customer===m.name);
+  const teams=allowedTeams();
+  const restricted=isRestricted();
+  let members=DATA.members;
+  if(restricted){members=members.filter(m=>DATA.records.some(x=>x.customer===m.name&&teams.indexOf(x.area)>=0));}
+  document.getElementById("member-grid").innerHTML=members.map(m=>{
+    let r=DATA.records.filter(x=>x.customer===m.name);
+    if(restricted)r=r.filter(x=>teams.indexOf(x.area)>=0);
     const prob=r.filter(x=>x.classification==="Problem").length;
     const neg=r.filter(x=>x.classification==="Negative").length;
-    const ba={};r.forEach(x=>ba[x.area]=(ba[x.area]||0)+1);
-    const top=Object.entries(ba).sort((a,b)=>b[1]-a[1])[0];
-    const ft=top?`<div class="cf"><span>Most about:</span> <b>${esc(top[0])}</b></div>`:`<div class="cf" style="color:var(--ink3)">No feedback tagged yet</div>`;
+    let ft;
+    if(restricted){
+      const bs={};r.filter(x=>x.classification==="Problem").forEach(x=>bs[x.subcategory]=(bs[x.subcategory]||0)+1);
+      const top=Object.entries(bs).sort((a,b)=>b[1]-a[1])[0];
+      ft=top?`<div class="cf"><span>Top issue:</span> <b>${esc(top[0])}</b></div>`:`<div class="cf" style="color:var(--ink3)">No problems yet</div>`;
+    }else{
+      const ba={};r.forEach(x=>ba[x.area]=(ba[x.area]||0)+1);
+      const top=Object.entries(ba).sort((a,b)=>b[1]-a[1])[0];
+      ft=top?`<div class="cf"><span>Most about:</span> <b>${esc(top[0])}</b></div>`:`<div class="cf" style="color:var(--ink3)">No feedback tagged yet</div>`;
+    }
     return `<div class="card" onclick="openMember('${eA(m.name)}')"><div class="ctop"><div><div class="cn">${esc(m.name)}</div><div class="cm">${r.length} tagged &middot; ${prob} problems &middot; ${neg} negatives</div></div><div class="ct">${r.length}</div></div>${ft}<div class="cgo">Open member &rarr;</div></div>`;
   }).join("");
 }
 
-function goTeams(){
-  if(!isAdmin()&&allowedTeam()){location.hash="team/"+encodeURIComponent(allowedTeam());return;}
-  location.hash="";
-}
-function goMembers(){if(!isAdmin())return;location.hash="members";}
+function goTeams(){location.hash="";}
+function goMembers(){location.hash="members";}
 function openTeam(a){location.hash="team/"+encodeURIComponent(a);}
 function openMember(n){location.hash="member/"+encodeURIComponent(n);}
 function showOnly(id){["home-view","team-view","member-view"].forEach(v=>document.getElementById(v).hidden=(v!==id));}
 function setHomeTab(w){["teams","members"].forEach(t=>{document.getElementById("tab-"+t).classList.toggle("on",t===w);document.getElementById(t+"-panel").hidden=t!==w;});}
+
+// Which members a restricted user is allowed to open: those with at least one record in any allowed team.
+function memberHasAllowedTeam(name){const teams=allowedTeams();return DATA.records.some(x=>x.customer===name&&teams.indexOf(x.area)>=0);}
 
 function route(){
   if(!SESSION)return;
@@ -362,13 +405,12 @@ function route(){
   if(h.startsWith("team/")){
     const a=decodeURIComponent(h.slice(5));
     if(DATA.taxonomy[a]&&canSeeTeam(a)){showOnly("team-view");renderTeam(a);window.scrollTo(0,0);return;}
-    if(DATA.taxonomy[a]&&!canSeeTeam(a)){location.hash=allowedTeam()?"team/"+encodeURIComponent(allowedTeam()):"";return;}
+    if(DATA.taxonomy[a]&&!canSeeTeam(a)){location.hash="";return;}
   }
-  if(h.startsWith("member/")&&isAdmin()){
-    const n=decodeURIComponent(h.slice(7));showOnly("member-view");renderMember(n);window.scrollTo(0,0);return;
-  }
-  if(!isAdmin()&&allowedTeam()){
-    showOnly("team-view");renderTeam(allowedTeam());window.scrollTo(0,0);return;
+  if(h.startsWith("member/")){
+    const n=decodeURIComponent(h.slice(7));
+    if(isAdmin()||(isRestricted()&&memberHasAllowedTeam(n))){showOnly("member-view");renderMember(n);window.scrollTo(0,0);return;}
+    location.hash="members";return;
   }
   showOnly("home-view");setHomeTab(h==="members"?"members":"teams");window.scrollTo(0,0);
 }
@@ -376,7 +418,7 @@ window.addEventListener("hashchange",route);
 
 function renderTeam(area){
   TV={area,sub:"all",type:"all"};
-  document.getElementById("tv-back").hidden=!isAdmin();
+  document.getElementById("tv-back").hidden=false;
   const r=DATA.records.filter(x=>x.area===area);
   document.getElementById("tv-title").textContent=area;
   document.getElementById("tv-sub").textContent=DATA.taxonomy[area].length+" subcategories · "+r.length+" messages";
@@ -408,15 +450,22 @@ function tvType(v){TV.type=(v!=="all"&&TV.type===v)?"all":v;refreshTeam();}
 
 function renderMember(name){
   MV={name,area:"all",type:"all"};
-  const r=DATA.records.filter(x=>x.customer===name);
+  const teams=allowedTeams();
+  const restricted=isRestricted();
+  let r=DATA.records.filter(x=>x.customer===name);
+  if(restricted)r=r.filter(x=>teams.indexOf(x.area)>=0);
   const m=DATA.members.find(x=>x.name===name)||{name,group:name,thread:[]};
   document.getElementById("mv-title").textContent=name;
-  document.getElementById("mv-sub").textContent=r.length+" tagged · "+m.thread.length+" total messages";
+  document.getElementById("mv-sub").textContent=restricted?r.length+" tagged for "+teams.join(", "):r.length+" tagged · "+m.thread.length+" total messages";
   document.getElementById("mv-cnt").textContent=r.filter(x=>x.classification==="Problem").length+" problems · "+r.filter(x=>x.classification==="Negative").length+" negatives";
   document.getElementById("mv-chat-title").textContent="Full conversation · "+m.group;
-  renderThread(m.thread);mvTab("sum");refreshMember();
+  // Hide the Full chat tab entirely for team-restricted users.
+  document.getElementById("mv-tab-chat").hidden=!isAdmin();
+  if(isAdmin())renderThread(m.thread);
+  mvTab("sum");refreshMember();
 }
 function mvTab(t){
+  if(t==="chat"&&!isAdmin())t="sum";
   document.getElementById("mv-sum").hidden=t!=="sum";
   document.getElementById("mv-chat").hidden=t!=="chat";
   document.getElementById("mv-tab-sum").classList.toggle("on",t==="sum");
@@ -432,7 +481,10 @@ function renderThread(thread){
   document.getElementById("mv-thread").innerHTML=h||'<div style="color:var(--ink3);font-style:italic;padding:14px">No messages found.</div>';
 }
 function refreshMember(){
-  const r=DATA.records.filter(x=>x.customer===MV.name);
+  const teams=allowedTeams();
+  const restricted=isRestricted();
+  let r=DATA.records.filter(x=>x.customer===MV.name);
+  if(restricted)r=r.filter(x=>teams.indexOf(x.area)>=0);
   const av=Object.keys(DATA.taxonomy).filter(a=>r.some(x=>x.area===a));
   renderChart("mv-chart",r,"area",av,MV.area==="all"?null:MV.area,"mvArea");
   const ac={};av.forEach(a=>ac[a]=r.filter(x=>x.area===a).length);
@@ -442,7 +494,7 @@ function refreshMember(){
   let f=r;
   if(MV.area!=="all")f=f.filter(x=>x.area===MV.area);
   if(MV.type!=="all")f=f.filter(x=>x.classification===MV.type);
-  renderTable("mv-table",f,{showTeam:true});
+  renderTable("mv-table",f,{showTeam:isAdmin()||teams.length>1});
 }
 function mvArea(v){MV.area=(v!=="all"&&MV.area===v)?"all":v;refreshMember();}
 function mvType(v){MV.type=(v!=="all"&&MV.type===v)?"all":v;refreshMember();}
