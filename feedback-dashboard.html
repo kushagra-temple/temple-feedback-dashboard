@@ -111,11 +111,41 @@ table.fb td.who{color:var(--ink3);white-space:nowrap;font-size:11px;}
 .faq-empty{color:var(--ink3);font-style:italic;font-size:12px;background:#f7f6f2;border-radius:7px;padding:11px 13px;}
 .faq-divider{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--ink3);padding:6px 0 4px;border-bottom:1px solid var(--rule);margin-bottom:4px;margin-top:8px;}
 [hidden]{display:none!important;}
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+.login-card{background:var(--card);border:1px solid var(--rule);border-radius:14px;padding:36px 34px;max-width:380px;width:100%;text-align:center;}
+.login-title{font-size:18px;font-weight:700;margin-bottom:6px;}
+.login-sub{font-size:12px;color:var(--ink3);margin-bottom:24px;line-height:1.5;}
+.gsi-wrap{display:flex;justify-content:center;margin-bottom:10px;}
+.login-err{font-size:11px;color:#7f1d1d;margin-top:12px;display:none;text-align:left;}
+.login-err.show{display:block;}
+.who-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
+.who-tag{font-size:11px;color:var(--ink3);}
+.who-tag b{color:var(--ink);}
+.logout-btn{background:none;border:none;font-family:inherit;color:var(--ink3);font-size:11px;cursor:pointer;text-decoration:underline;padding:0;}
+.logout-btn:hover{color:var(--ink);}
 </style>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
-<div class="wrap">
-  <div class="topbar"><h1>Customer feedback</h1></div>
+<div class="login-wrap" id="login-view">
+  <div class="login-card">
+    <div class="login-title">Member feedback</div>
+    <div class="login-sub">Sign in with your Temple Google account to view feedback for your team.</div>
+    <div id="g_id_onload"
+      data-client_id="667916747255-7m7o2oal769bdoaqe4n5t3upfbm84oag.apps.googleusercontent.com"
+      data-callback="handleGoogleSignIn"
+      data-auto_prompt="false">
+    </div>
+    <div class="gsi-wrap">
+      <div class="g_id_signin" data-type="standard" data-size="large" data-theme="outline" data-text="signin_with" data-shape="rectangular" data-logo_alignment="left"></div>
+    </div>
+    <div class="login-err" id="login-err">That email isn't on the access list. Contact your admin.</div>
+  </div>
+</div>
+<div class="wrap" id="app-view" hidden>
+  <div class="topbar">
+    <div class="who-bar"><h1>Member feedback</h1><span class="who-tag" id="who-tag"></span></div>
+  </div>
   <div id="home-view">
     <div class="tabs">
       <button class="tab on" id="tab-teams" onclick="goTeams()">By team</button>
@@ -125,7 +155,7 @@ table.fb td.who{color:var(--ink3);white-space:nowrap;font-size:11px;}
     <section id="members-panel" hidden><div class="grid" id="member-grid"></div></section>
   </div>
   <div id="team-view" hidden>
-    <button class="back" onclick="goTeams()">&#8592; All teams</button>
+    <button class="back" id="tv-back" onclick="goTeams()">&#8592; All teams</button>
     <div class="dh">
       <div><h1 id="tv-title"></h1><div style="color:var(--ink3);font-size:12px;margin-top:3px;" id="tv-sub"></div></div>
       <div class="dhc" id="tv-cnt"></div>
@@ -172,6 +202,77 @@ const ORDER={Problem:0,Negative:1,Positive:2,Suggestion:3,Question:4};
 const RKEY="temple_v4";
 let REMARKS={};
 try{REMARKS=JSON.parse(localStorage.getItem(RKEY)||"{}");}catch(e){}
+
+// ===== ACCESS CONTROL =====
+// Edit this list to add/remove people. role:"admin" sees everything.
+// role:"team" + team:"<Team Name>" restricts to that team only (must match a key in DATA.taxonomy exactly).
+const ACCESS_LIST=[
+  {email:"kushagra@temple.com",role:"admin"},
+  {email:"jalaj@temple.com",role:"admin"},
+  {email:"aaqib@temple.com",role:"admin"},
+  {email:"chinmay@temple.com",role:"team",team:"Science Team"}
+];
+const SESSION_KEY="temple_session_v1";
+let SESSION=null;
+try{SESSION=JSON.parse(sessionStorage.getItem(SESSION_KEY)||"null");}catch(e){}
+
+function findAccess(email){
+  const e=(email||"").trim().toLowerCase();
+  return ACCESS_LIST.find(a=>a.email.toLowerCase()===e)||null;
+}
+// Decode the JWT Google sends back — no library needed, it's just base64.
+function decodeJwt(token){
+  try{
+    const payload=token.split(".")[1];
+    const json=decodeURIComponent(atob(payload.replace(/-/g,"+").replace(/_/g,"/")).split("").map(c=>"%"+("00"+c.charCodeAt(0).toString(16)).slice(-2)).join(""));
+    return JSON.parse(json);
+  }catch(e){return null;}
+}
+// This is called automatically by Google's sign-in button once the user authenticates.
+function handleGoogleSignIn(response){
+  const payload=decodeJwt(response.credential);
+  const errEl=document.getElementById("login-err");
+  if(!payload||!payload.email||!payload.email_verified){
+    errEl.textContent="Could not verify your Google account. Please try again.";
+    errEl.classList.add("show");
+    return;
+  }
+  const email=payload.email.toLowerCase();
+  if(!email.endsWith("@temple.com")){
+    errEl.textContent="Please sign in with your @temple.com Google account.";
+    errEl.classList.add("show");
+    return;
+  }
+  const acc=findAccess(email);
+  if(!acc){
+    errEl.textContent="Signed in as "+email+" — this email isn't on the access list yet. Contact your admin.";
+    errEl.classList.add("show");
+    return;
+  }
+  errEl.classList.remove("show");
+  SESSION={email,role:acc.role,team:acc.team||null};
+  try{sessionStorage.setItem(SESSION_KEY,JSON.stringify(SESSION));}catch(e){}
+  enterApp();
+}
+function logout(){
+  SESSION=null;
+  try{sessionStorage.removeItem(SESSION_KEY);}catch(e){}
+  document.getElementById("app-view").hidden=true;
+  document.getElementById("login-view").hidden=false;
+  if(window.google&&google.accounts&&google.accounts.id)google.accounts.id.disableAutoSelect();
+}
+function isAdmin(){return SESSION&&SESSION.role==="admin";}
+function allowedTeam(){return SESSION&&SESSION.role==="team"?SESSION.team:null;}
+function canSeeTeam(area){return isAdmin()||allowedTeam()===area;}
+function enterApp(){
+  document.getElementById("login-view").hidden=true;
+  document.getElementById("app-view").hidden=false;
+  const tag=isAdmin()?`<b>${esc(SESSION.email)}</b> · admin <button class="logout-btn" onclick="logout()" style="margin-left:8px;">sign out</button>`:`<b>${esc(SESSION.email)}</b> · ${esc(SESSION.team)} <button class="logout-btn" onclick="logout()" style="margin-left:8px;">sign out</button>`;
+  document.getElementById("who-tag").innerHTML=tag;
+  document.getElementById("tab-members").hidden=!isAdmin();
+  renderTeamGrid();renderMemberGrid();route();
+}
+if(SESSION&&findAccess(SESSION.email)){enterApp();}else{document.getElementById("login-view").hidden=false;}
 function saveR(id,v){if(v&&v.trim())REMARKS[id]=v;else delete REMARKS[id];try{localStorage.setItem(RKEY,JSON.stringify(REMARKS));}catch(e){}}
 function onR(id,el){saveR(id,el.value);el.classList.toggle("saved",!!(el.value&&el.value.trim()));}
 function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
@@ -220,7 +321,8 @@ function renderFAQ(area){
 }
 
 function renderTeamGrid(){
-  document.getElementById("team-grid").innerHTML=Object.keys(DATA.taxonomy).map(a=>{
+  const teams=Object.keys(DATA.taxonomy).filter(canSeeTeam);
+  document.getElementById("team-grid").innerHTML=teams.map(a=>{
     const r=DATA.records.filter(x=>x.area===a);
     const prob=r.filter(x=>x.classification==="Problem").length;
     const neg=r.filter(x=>x.classification==="Negative").length;
@@ -232,6 +334,7 @@ function renderTeamGrid(){
 }
 
 function renderMemberGrid(){
+  if(!isAdmin())return;
   document.getElementById("member-grid").innerHTML=DATA.members.map(m=>{
     const r=DATA.records.filter(x=>x.customer===m.name);
     const prob=r.filter(x=>x.classification==="Problem").length;
@@ -243,23 +346,37 @@ function renderMemberGrid(){
   }).join("");
 }
 
-function goTeams(){location.hash="";}
-function goMembers(){location.hash="members";}
+function goTeams(){
+  if(!isAdmin()&&allowedTeam()){location.hash="team/"+encodeURIComponent(allowedTeam());return;}
+  location.hash="";
+}
+function goMembers(){if(!isAdmin())return;location.hash="members";}
 function openTeam(a){location.hash="team/"+encodeURIComponent(a);}
 function openMember(n){location.hash="member/"+encodeURIComponent(n);}
 function showOnly(id){["home-view","team-view","member-view"].forEach(v=>document.getElementById(v).hidden=(v!==id));}
 function setHomeTab(w){["teams","members"].forEach(t=>{document.getElementById("tab-"+t).classList.toggle("on",t===w);document.getElementById(t+"-panel").hidden=t!==w;});}
 
 function route(){
+  if(!SESSION)return;
   const h=location.hash.replace(/^#/,"");
-  if(h.startsWith("team/")){const a=decodeURIComponent(h.slice(5));if(DATA.taxonomy[a]){showOnly("team-view");renderTeam(a);window.scrollTo(0,0);return;}}
-  if(h.startsWith("member/")){const n=decodeURIComponent(h.slice(7));showOnly("member-view");renderMember(n);window.scrollTo(0,0);return;}
+  if(h.startsWith("team/")){
+    const a=decodeURIComponent(h.slice(5));
+    if(DATA.taxonomy[a]&&canSeeTeam(a)){showOnly("team-view");renderTeam(a);window.scrollTo(0,0);return;}
+    if(DATA.taxonomy[a]&&!canSeeTeam(a)){location.hash=allowedTeam()?"team/"+encodeURIComponent(allowedTeam()):"";return;}
+  }
+  if(h.startsWith("member/")&&isAdmin()){
+    const n=decodeURIComponent(h.slice(7));showOnly("member-view");renderMember(n);window.scrollTo(0,0);return;
+  }
+  if(!isAdmin()&&allowedTeam()){
+    showOnly("team-view");renderTeam(allowedTeam());window.scrollTo(0,0);return;
+  }
   showOnly("home-view");setHomeTab(h==="members"?"members":"teams");window.scrollTo(0,0);
 }
 window.addEventListener("hashchange",route);
 
 function renderTeam(area){
   TV={area,sub:"all",type:"all"};
+  document.getElementById("tv-back").hidden=!isAdmin();
   const r=DATA.records.filter(x=>x.area===area);
   document.getElementById("tv-title").textContent=area;
   document.getElementById("tv-sub").textContent=DATA.taxonomy[area].length+" subcategories · "+r.length+" messages";
